@@ -1,0 +1,229 @@
+---
+import { getCollection } from "astro:content";
+import config from "../../site.config.json";
+import Footer from "../components/Footer.astro";
+
+const items = (await getCollection("items")).sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+);
+const fmt = (d: Date) =>
+  d.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
+const usedCats = config.categories.filter((c) =>
+  items.some((i) => (i.data.category ?? "misc") === c)
+);
+---
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{config.title}</title>
+    <meta name="description" content={config.description} />
+  </head>
+  <body>
+    <header>
+      <h1>{config.title}<sup>{items.length}</sup></h1>
+      <div class="filter">
+        <button type="button" class="filter-btn" aria-haspopup="listbox" aria-expanded="false">
+          <span class="filter-label">wszystko</span> <span class="count">({items.length})</span> ▾
+        </button>
+        <ul class="filter-list" role="listbox" hidden>
+          <li role="option" data-cat="">wszystko</li>
+          {usedCats.map((c) => <li role="option" data-cat={c}>{c}</li>)}
+        </ul>
+      </div>
+    </header>
+
+    <main class="grid">
+      {items.map((item) => (
+        <figure
+          class="cell"
+          data-cat={item.data.category ?? "misc"}
+          data-full={item.data.image}
+          data-thumb={item.data.thumb}
+          data-title={item.data.title}
+          data-date={fmt(item.data.date)}
+          data-location={item.data.location ?? ""}
+        >
+          <button type="button" class="frame" aria-label={item.data.title}>
+            <img
+              src={item.data.thumb}
+              alt={item.data.title}
+              width={item.data.width}
+              height={item.data.height}
+              loading="lazy"
+              decoding="async"
+            />
+          </button>
+          <figcaption>
+            <span class="t">{item.data.title}</span>
+            <span class="d">{fmt(item.data.date)}</span>
+          </figcaption>
+        </figure>
+      ))}
+    </main>
+
+    <dialog class="lightbox" tabindex="-1">
+      <button type="button" class="lb-close" aria-label="Zamknij">×</button>
+      <div class="lb-stage"><img class="lb-img" alt="" /></div>
+      <div class="lb-bar">
+        <button type="button" class="lb-prev" aria-label="Poprzedni">←</button>
+        <div class="lb-meta">
+          <span class="lb-title"></span>
+          <span class="lb-sub"></span>
+        </div>
+        <button type="button" class="lb-next" aria-label="Następny">→</button>
+      </div>
+    </dialog>
+
+    <Footer />
+
+    <script>
+      const cells = Array.from(document.querySelectorAll<HTMLElement>(".cell"));
+
+      // Fade-in images as they load / scroll into view
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const img = e.target as HTMLImageElement;
+          const show = () => img.classList.add("in");
+          img.complete ? show() : img.addEventListener("load", show, { once: true });
+          io.unobserve(img);
+        }
+      }, { rootMargin: "200px" });
+      document.querySelectorAll<HTMLImageElement>(".frame img").forEach((img) => io.observe(img));
+
+      // Category filter
+      const btn = document.querySelector<HTMLButtonElement>(".filter-btn")!;
+      const list = document.querySelector<HTMLUListElement>(".filter-list")!;
+      const label = document.querySelector(".filter-label")!;
+      const count = document.querySelector(".count")!;
+      let visible = cells;
+      const toggleList = (open: boolean) => {
+        list.hidden = !open;
+        btn.setAttribute("aria-expanded", String(open));
+      };
+      btn.addEventListener("click", (e) => { e.stopPropagation(); toggleList(list.hidden); });
+      document.addEventListener("click", () => toggleList(false));
+      list.addEventListener("click", (e) => {
+        const li = (e.target as HTMLElement).closest("li");
+        if (!li) return;
+        const cat = li.dataset.cat ?? "";
+        cells.forEach((c) => (c.style.display = !cat || c.dataset.cat === cat ? "" : "none"));
+        visible = cells.filter((c) => c.style.display !== "none");
+        label.textContent = cat || "wszystko";
+        count.textContent = `(${visible.length})`;
+        list.querySelectorAll("li").forEach((x) => x.classList.toggle("active", x === li));
+      });
+
+      // Lightbox
+      const dlg = document.querySelector<HTMLDialogElement>(".lightbox")!;
+      const lbImg = dlg.querySelector<HTMLImageElement>(".lb-img")!;
+      const lbTitle = dlg.querySelector(".lb-title")!;
+      const lbSub = dlg.querySelector(".lb-sub")!;
+      let idx = 0;
+      let token = 0;
+      const preload = (src?: string) => { if (src) new Image().src = src; };
+
+      function show(i: number) {
+        if (!visible.length) return;
+        idx = (i + visible.length) % visible.length;
+        const c = visible[idx];
+        const my = ++token;
+        lbImg.src = c.dataset.thumb!; // thumbnail instantly
+        lbImg.alt = c.dataset.title!;
+        const full = new Image();
+        full.onload = () => { if (my === token) lbImg.src = full.src; };
+        full.src = c.dataset.full!;
+        lbTitle.textContent = c.dataset.title!;
+        lbSub.textContent = [c.dataset.date, c.dataset.location].filter(Boolean).join(" · ");
+        preload(visible[(idx + 1) % visible.length]?.dataset.full);
+        preload(visible[(idx - 1 + visible.length) % visible.length]?.dataset.full);
+      }
+
+      cells.forEach((c) =>
+        c.querySelector(".frame")!.addEventListener("click", () => {
+          show(visible.indexOf(c));
+          dlg.showModal();
+          dlg.focus(); // avoid focus ring on the close button
+        })
+      );
+      dlg.querySelector(".lb-prev")!.addEventListener("click", () => show(idx - 1));
+      dlg.querySelector(".lb-next")!.addEventListener("click", () => show(idx + 1));
+      dlg.querySelector(".lb-close")!.addEventListener("click", () => dlg.close());
+      dlg.addEventListener("click", (e) => {
+        if (e.target === dlg || (e.target as HTMLElement).classList.contains("lb-stage")) dlg.close();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (!dlg.open) return;
+        if (e.key === "ArrowRight") show(idx + 1);
+        if (e.key === "ArrowLeft") show(idx - 1);
+      });
+      dlg.addEventListener("close", () => (document.activeElement as HTMLElement | null)?.blur());
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #fff;
+    --fg: #111;
+    --muted: #888;
+    --line: #eee;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.4; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  :focus:not(:focus-visible) { outline: none; }
+  :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
+
+  header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 24px; gap: 16px;
+  }
+  h1 { font-size: 14px; font-weight: 500; }
+  h1 sup { font-size: 9px; color: var(--muted); margin-left: 2px; }
+
+  .filter { position: relative; }
+  .filter-btn { color: var(--fg); }
+  .count { color: var(--muted); }
+  .filter-list {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 10;
+    list-style: none; background: var(--bg); border: 1px solid var(--line);
+    min-width: 140px; padding: 4px 0;
+  }
+  .filter-list li { padding: 6px 14px; cursor: pointer; }
+  .filter-list li:hover, .filter-list li.active { background: #f5f5f5; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 32px 24px; padding: 0 24px;
+  }
+  @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px) { header { padding: 16px; } .grid { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; padding: 0 16px; } }
+
+  .frame { display: block; position: relative; width: 100%; padding-top: 100%; }
+  .frame img {
+    position: absolute; inset: 10%; width: 80%; height: 80%;
+    object-fit: contain; opacity: 0; transition: opacity .5s ease;
+  }
+  .frame img.in { opacity: 1; }
+  .frame:hover img { transform: scale(1.03); transition: transform .3s ease, opacity .5s ease; }
+  figcaption { display: flex; flex-direction: column; margin-top: 8px; font-size: 12px; }
+  figcaption .d { color: var(--muted); }
+
+  dialog.lightbox {
+    margin: auto; border: 0; padding: 0; background: var(--bg);
+    width: 100vw; height: 100dvh; max-width: none; max-height: none;
+  }
+  dialog.lightbox::backdrop { background: var(--bg); }
+  .lightbox[open] { display: flex; flex-direction: column; }
+  .lb-close { position: absolute; top: 16px; right: 24px; font-size: 28px; line-height: 1; z-index: 2; }
+  .lb-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 48px 24px 0; }
+  .lb-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .lb-bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px 24px; gap: 16px; }
+  .lb-bar button { font-size: 20px; padding: 4px 12px; }
+  .lb-meta { text-align: center; display: flex; flex-direction: column; }
+  .lb-sub { color: var(--muted); font-size: 12px; }
+</style>

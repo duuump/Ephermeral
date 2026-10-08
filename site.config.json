@@ -1,0 +1,6 @@
+{
+  "title": "Znaleziska",
+  "description": "Przedmioty znalezione na ulicy.",
+  "collection": "znaleziska",
+  "categories": ["sign", "toy", "tool", "packaging", "misc"]
+}
