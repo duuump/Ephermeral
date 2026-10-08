@@ -1,7 +1,8 @@
 ---
-const built = new Date().toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" });
+import { fmtDate } from "../lib/date";
+const built = fmtDate(new Date());
 ---
-<footer>Ostatnia aktualizacja: {built}</footer>
+<footer>Last update: {built}</footer>
 <style>
   footer { padding: 48px 24px 32px; font-size: 13px; color: var(--muted); }
   @media (max-width: 600px) { footer { padding: 40px 16px 24px; } }

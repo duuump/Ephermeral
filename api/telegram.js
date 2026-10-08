@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     await handleMessage(msg);
   } catch (err) {
     console.error(err);
-    await tg("sendMessage", { chat_id: msg.chat.id, text: `⚠️ Nie udało się: ${err.message || err}` }).catch(() => {});
+    await tg("sendMessage", { chat_id: msg.chat.id, text: `⚠️ Failed: ${err.message || err}` }).catch(() => {});
   }
   return res.status(200).send("ok");
 }
@@ -49,10 +49,10 @@ async function handleMessage(msg) {
     return tg("sendMessage", {
       chat_id,
       text:
-        "Wyślij zdjęcie (podpis = tytuł), a pojawi się na stronie.\n" +
-        "Wyślij jako „Plik”, żeby zachować lokalizację GPS.\n\n" +
-        "/delete — odpowiedz tym na moje potwierdzenie, żeby usunąć przedmiot\n" +
-        "/stats — statystyki kolekcji",
+        "Send a photo (caption = title) and it will appear on the site.\n" +
+        "Send it as a File to keep the GPS location.\n\n" +
+        "/delete — reply to my confirmation to remove an item\n" +
+        "/stats — collection stats",
     });
   }
 
@@ -61,7 +61,7 @@ async function handleMessage(msg) {
   // 1. Download the original from Telegram
   const file = await tg("getFile", { file_id: fileId });
   const origRes = await fetch(`https://api.telegram.org/file/bot${TG_TOKEN}/${file.file_path}`);
-  if (!origRes.ok) throw new Error(`Pobranie zdjęcia z Telegrama: HTTP ${origRes.status}`);
+  if (!origRes.ok) throw new Error(`Downloading photo from Telegram: HTTP ${origRes.status}`);
   const original = Buffer.from(await origRes.arrayBuffer());
 
   // 2. GPS from EXIF (only survives "send as File") → place name
@@ -77,7 +77,7 @@ async function handleMessage(msg) {
     .toBuffer();
   const cutoutUrl = await removeBackground(input);
   const cutoutRes = await fetch(cutoutUrl);
-  if (!cutoutRes.ok) throw new Error(`Pobranie wyciętego obrazu: HTTP ${cutoutRes.status}`);
+  if (!cutoutRes.ok) throw new Error(`Downloading cutout: HTTP ${cutoutRes.status}`);
   const cutout = Buffer.from(await cutoutRes.arrayBuffer());
 
   // 4. Trim transparent padding, encode full + thumb, dominant colour
@@ -97,7 +97,7 @@ async function handleMessage(msg) {
   // Slug is derived from the message id, so a re-delivered update overwrites instead of duplicating.
   const date = new Date(msg.date * 1000);
   const slug = `${date.toISOString().slice(0, 10).replace(/-/g, "")}-${msg.message_id.toString(36).padStart(4, "0")}`;
-  const title = (msg.caption || "").trim() || "bez tytułu";
+  const title = (msg.caption || "").trim() || "untitled";
   const item = {
     title,
     date: date.toISOString(),
@@ -124,7 +124,7 @@ async function handleMessage(msg) {
   const caption = [
     `✅ ${title}`,
     location && `📍 ${location}`,
-    "Na stronie za ok. 2 min.",
+    "Live on the site in ~2 min.",
     `slug: ${slug}`,
   ].filter(Boolean).join("\n");
   await sendPhoto(chat_id, preview, caption, msg.message_id);
@@ -135,14 +135,14 @@ async function handleDelete(msg) {
   const replied = msg.reply_to_message;
   const slug = (replied?.caption || replied?.text || "").match(/slug:\s*(\S+)/)?.[1];
   if (!slug) {
-    return tg("sendMessage", { chat_id, text: "Odpowiedz komendą /delete na moje potwierdzenie (to z „slug: …”)." });
+    return tg("sendMessage", { chat_id, text: "Reply /delete to my confirmation message (the one with “slug: …”)." });
   }
   await commit(`Delete ${slug}`, [
     { path: `public/${COLL}/${slug}.webp`, content: null },
     { path: `public/${COLL}/${slug}-thumb.webp`, content: null },
     { path: `src/content/${COLL}/${slug}.json`, content: null },
   ]);
-  await tg("sendMessage", { chat_id, text: `🗑 Usunięto ${slug}. Zniknie ze strony za ok. 2 min.` });
+  await tg("sendMessage", { chat_id, text: `🗑 Deleted ${slug}. Gone from the site in ~2 min.` });
 }
 
 async function handleStats(chat_id) {
@@ -151,15 +151,15 @@ async function handleStats(chat_id) {
     throw e;
   });
   const slugs = list.filter((f) => f.name.endsWith(".json")).map((f) => f.name.slice(0, -5)).sort();
-  const day = (s) => s && `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(0, 4)}`;
+  const day = (s) => s && `${s.slice(6, 8)}.${s.slice(4, 6)}.${s.slice(2, 4)}`;
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const month = today.slice(0, 6);
   const lines = [
-    `📦 Przedmiotów: ${slugs.length}`,
-    `W tym miesiącu: ${slugs.filter((s) => s.startsWith(month)).length}`,
-    slugs.length && `Pierwszy: ${day(slugs[0])}`,
-    slugs.length && `Ostatni: ${day(slugs.at(-1))}`,
-    `💸 Koszt przetwarzania: ~$${(slugs.length * COST_PER_ITEM).toFixed(3)}`,
+    `📦 Items: ${slugs.length}`,
+    `This month: ${slugs.filter((s) => s.startsWith(month)).length}`,
+    slugs.length && `First: ${day(slugs[0])}`,
+    slugs.length && `Latest: ${day(slugs.at(-1))}`,
+    `💸 Processing cost: ~$${(slugs.length * COST_PER_ITEM).toFixed(3)}`,
   ].filter(Boolean);
   await tg("sendMessage", { chat_id, text: lines.join("\n") });
 }
@@ -184,7 +184,7 @@ function readGps(exifBuf) {
 }
 
 async function reverseGeocode(lat, lng) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=pl&lat=${lat}&lon=${lng}`;
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=en&lat=${lat}&lon=${lng}`;
   const r = await fetch(url, { headers: { "User-Agent": `${GH_REPO || "collection-site"} telegram bot` } });
   if (!r.ok) return null;
   const a = (await r.json()).address || {};
@@ -205,7 +205,7 @@ async function removeBackground(jpeg) {
   // Community model: the model-named predictions endpoint 404s, so resolve the version first.
   const model = await replicate(`/v1/models/${BG_MODEL}`);
   const version = model.latest_version?.id;
-  if (!version) throw new Error(`Replicate: brak wersji modelu ${BG_MODEL}`);
+  if (!version) throw new Error(`Replicate: no version for ${BG_MODEL}`);
 
   let p = await replicate("/v1/predictions", {
     method: "POST",
@@ -218,7 +218,7 @@ async function removeBackground(jpeg) {
   }
   if (p.status !== "succeeded") throw new Error(`Replicate: ${p.error || p.status}`);
   const out = Array.isArray(p.output) ? p.output[0] : p.output;
-  if (typeof out !== "string") throw new Error("Replicate: nieoczekiwany wynik modelu");
+  if (typeof out !== "string") throw new Error("Replicate: unexpected model output");
   return out;
 }
 
@@ -260,7 +260,7 @@ async function gh(path, opts = {}) {
 }
 
 async function commit(message, files) {
-  if (!GH_REPO) throw new Error("Brak GITHUB_REPO (właściciel/nazwa repozytorium)");
+  if (!GH_REPO) throw new Error("Missing GITHUB_REPO (owner/name)");
   const repo = `/repos/${GH_REPO}`;
   const { default_branch: branch } = await gh(repo);
 

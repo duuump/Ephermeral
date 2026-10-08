@@ -2,15 +2,14 @@
 import { getCollection } from "astro:content";
 import config from "../../site.config.json";
 import Footer from "../components/Footer.astro";
+import { fmtDate } from "../lib/date";
 
 const items = (await getCollection("items")).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime()
 );
-const fmt = (d: Date) =>
-  d.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
 ---
 <!doctype html>
-<html lang="pl">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -19,7 +18,7 @@ const fmt = (d: Date) =>
   </head>
   <body>
     <header>
-      <h1>{config.title}</h1>
+      <h1><img class="logo" src="/logo.svg" alt={config.title} width="200" height="40" /></h1>
     </header>
 
     <main class="grid">
@@ -29,7 +28,7 @@ const fmt = (d: Date) =>
           data-full={item.data.image}
           data-thumb={item.data.thumb}
           data-title={item.data.title}
-          data-date={fmt(item.data.date)}
+          data-date={fmtDate(item.data.date)}
           data-location={item.data.location ?? ""}
         >
           <button type="button" class="frame" aria-label={item.data.title}>
@@ -44,22 +43,22 @@ const fmt = (d: Date) =>
           </button>
           <figcaption>
             <span class="t">{item.data.title}</span>
-            <span class="d">{fmt(item.data.date)}</span>
+            <span class="d">{fmtDate(item.data.date)}</span>
           </figcaption>
         </figure>
       ))}
     </main>
 
     <dialog class="lightbox" tabindex="-1">
-      <button type="button" class="lb-close" aria-label="Zamknij">×</button>
+      <button type="button" class="lb-close" aria-label="Close">×</button>
       <div class="lb-stage"><img class="lb-img" alt="" /></div>
       <div class="lb-bar">
-        <button type="button" class="lb-prev" aria-label="Poprzedni">←</button>
+        <button type="button" class="lb-prev" aria-label="Previous">←</button>
         <div class="lb-meta">
           <span class="lb-title"></span>
           <span class="lb-sub"></span>
         </div>
-        <button type="button" class="lb-next" aria-label="Następny">→</button>
+        <button type="button" class="lb-next" aria-label="Next">→</button>
       </div>
     </dialog>
 
@@ -147,7 +146,8 @@ const fmt = (d: Date) =>
     display: flex; justify-content: space-between; align-items: baseline;
     padding: 24px; gap: 16px;
   }
-  h1 { font-size: 14px; font-weight: 500; }
+  h1 { font-size: 0; line-height: 0; }
+  .logo { display: block; width: 200px; height: auto; }
 
 
   .grid {
