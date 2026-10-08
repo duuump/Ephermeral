@@ -159,6 +159,7 @@ const items = (await getCollection("items")).sort(
   :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
 
   header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
     display: flex; justify-content: space-between; align-items: baseline;
     padding: 24px; gap: 16px;
   }
