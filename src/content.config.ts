@@ -13,7 +13,6 @@ const items = defineCollection({
     width: z.number(),
     height: z.number(),
     color: z.string().optional(),
-    category: z.string().optional(),
     location: z.string().optional(),
     lat: z.number().optional(),
     lng: z.number().optional(),
