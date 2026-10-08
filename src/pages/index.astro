@@ -3,6 +3,7 @@ import { getCollection } from "astro:content";
 import config from "../../site.config.json";
 import Footer from "../components/Footer.astro";
 import { fmtDate } from "../lib/date";
+import logo from "../assets/logo.svg?raw";
 
 const items = (await getCollection("items")).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime()
@@ -18,7 +19,7 @@ const items = (await getCollection("items")).sort(
   </head>
   <body>
     <header>
-      <h1><img class="logo" src="/logo.svg" alt={config.title} width="200" height="40" /></h1>
+      <h1 set:html={logo} />
     </header>
 
     <main class="grid">
@@ -65,6 +66,21 @@ const items = (await getCollection("items")).sort(
     <Footer />
 
     <script>
+      // Logo: a red → green → yellow → blue wave runs through the letters as you scroll
+      const letters = Array.from(document.querySelectorAll<SVGPathElement>(".logo .letter"));
+      const wave = ["#ff0000", "#00af4f", "#ffec00", "#0074ff"];
+      const frames = letters.length + wave.length; // all black, wave enters, wave leaves
+      const STEP = 60; // px of scroll per frame
+      let lastFrame = -1;
+      const paintLogo = () => {
+        const f = Math.floor(window.scrollY / STEP) % frames;
+        if (f === lastFrame) return;
+        lastFrame = f;
+        letters.forEach((l, i) => (l.style.fill = wave[f - 1 - i] ?? ""));
+      };
+      window.addEventListener("scroll", () => requestAnimationFrame(paintLogo), { passive: true });
+      paintLogo();
+
       const cells = Array.from(document.querySelectorAll<HTMLElement>(".cell"));
 
       // Fade-in images as they load / scroll into view
@@ -148,6 +164,7 @@ const items = (await getCollection("items")).sort(
   }
   h1 { font-size: 0; line-height: 0; }
   .logo { display: block; width: 200px; height: auto; }
+  @media (max-width: 600px) { .logo { width: 160px; } }
 
 
   .grid {

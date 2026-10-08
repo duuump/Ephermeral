@@ -41,6 +41,7 @@ async function handleMessage(msg) {
 
   if (text.startsWith("/delete")) return handleDelete(msg);
   if (text.startsWith("/stats")) return handleStats(chat_id);
+  if (text.startsWith("/title")) return handleTitle(msg);
 
   const fileId =
     msg.photo?.at(-1)?.file_id ||
@@ -50,7 +51,9 @@ async function handleMessage(msg) {
       chat_id,
       text:
         "Send a photo (caption = title) and it will appear on the site.\n" +
-        "Send it as a File to keep the GPS location.\n\n" +
+        "Send it as a File to keep the GPS location.\n" +
+        "Start the caption with /raw to keep the background.\n\n" +
+        "/title New title — reply to my confirmation to rename an item\n" +
         "/delete — reply to my confirmation to remove an item\n" +
         "/stats — collection stats",
     });
@@ -69,19 +72,27 @@ async function handleMessage(msg) {
   const gps = readGps(meta.exif);
   const location = gps ? await reverseGeocode(gps.lat, gps.lng).catch(() => null) : null;
 
+  // A caption starting with /raw keeps the photo as is (no background removal).
+  const raw = /^\/raw\b/i.test((msg.caption || "").trim());
+
   // 3. Background removal. Upright + capped input keeps the upload small.
   const input = await sharp(original)
     .rotate()
     .resize({ width: 2560, height: 2560, fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 92 })
     .toBuffer();
-  const cutoutUrl = await removeBackground(input);
-  const cutoutRes = await fetch(cutoutUrl);
-  if (!cutoutRes.ok) throw new Error(`Downloading cutout: HTTP ${cutoutRes.status}`);
-  const cutout = Buffer.from(await cutoutRes.arrayBuffer());
+  let trimmed = input;
+  if (!raw) {
+    const cutoutUrl = await removeBackground(input);
+    const cutoutRes = await fetch(cutoutUrl);
+    if (!cutoutRes.ok) throw new Error(`Downloading cutout: HTTP ${cutoutRes.status}`);
+    const cutout = Buffer.from(await cutoutRes.arrayBuffer());
 
-  // 4. Trim transparent padding, encode full + thumb, dominant colour
-  const trimmed = await sharp(cutout).trim().png().toBuffer().catch(() => cutout);
+    // 4. Trim transparent padding
+    trimmed = await sharp(cutout).trim().png().toBuffer().catch(() => cutout);
+  }
+
+  // Encode full + thumb, dominant colour
   const full = await sharp(trimmed)
     .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
     .webp({ quality: 85 })
@@ -97,7 +108,7 @@ async function handleMessage(msg) {
   // Slug is derived from the message id, so a re-delivered update overwrites instead of duplicating.
   const date = new Date(msg.date * 1000);
   const slug = `${date.toISOString().slice(0, 10).replace(/-/g, "")}-${msg.message_id.toString(36).padStart(4, "0")}`;
-  const title = (msg.caption || "").trim() || "untitled";
+  const title = (msg.caption || "").trim().replace(/^\/raw\b\s*/i, "") || "untitled";
   const item = {
     title,
     date: date.toISOString(),
@@ -143,6 +154,25 @@ async function handleDelete(msg) {
     { path: `src/content/${COLL}/${slug}.json`, content: null },
   ]);
   await tg("sendMessage", { chat_id, text: `🗑 Deleted ${slug}. Gone from the site in ~2 min.` });
+}
+
+async function handleTitle(msg) {
+  const chat_id = msg.chat.id;
+  const replied = msg.reply_to_message;
+  const slug = (replied?.caption || replied?.text || "").match(/slug:\s*(\S+)/)?.[1];
+  const title = msg.text.replace(/^\/title(@\S+)?\s*/, "").trim();
+  if (!slug || !title) {
+    return tg("sendMessage", { chat_id, text: "Reply to my confirmation message with: /title New title" });
+  }
+  const path = `src/content/${COLL}/${slug}.json`;
+  const { default_branch } = await gh(`/repos/${GH_REPO}`);
+  const file = await gh(`/repos/${GH_REPO}/contents/${path}?ref=${encodeURIComponent(default_branch)}`);
+  const item = JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
+  item.title = title;
+  await commit(`Rename ${slug}: ${title}`, [
+    { path, content: Buffer.from(JSON.stringify(item, null, 2) + "\n") },
+  ]);
+  await tg("sendMessage", { chat_id, text: `✏️ Renamed to “${title}”. Updated on the site in ~2 min.\nslug: ${slug}` });
 }
 
 async function handleStats(chat_id) {

@@ -2,8 +2,13 @@
 import { fmtDate } from "../lib/date";
 const built = fmtDate(new Date());
 ---
-<footer>Last update: {built}</footer>
+<footer>
+  <p>Last update: {built}</p>
+  <p class="credit">Website concept bootlegged from <a href="https://www.tybura.com/junk">tybura.com/junk</a>. Thanks, Emil ❤️</p>
+</footer>
 <style>
+  .credit { margin-top: 8px; }
+  a { color: inherit; }
   footer { padding: 48px 24px 32px; font-size: 13px; color: var(--muted); }
   @media (max-width: 600px) { footer { padding: 40px 16px 24px; } }
 </style>
