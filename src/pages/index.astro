@@ -1,7 +1,6 @@
 ---
 import { getCollection } from "astro:content";
 import config from "../../site.config.json";
-import Footer from "../components/Footer.astro";
 import { fmtDate } from "../lib/date";
 import logo from "../assets/logo.svg?raw";
 
@@ -86,7 +85,6 @@ const data = items.map((i) => ({
           </figure>
         ))}
       </div>
-      <Footer />
     </section>
 
     <section class="about">
@@ -205,7 +203,7 @@ const data = items.map((i) => ({
       const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
       // How messy the drawer is (position jitter in cells, rotation in degrees, size spread)
-      const CHAOS = { jitter: 0.78, rotate: 18, size: 0.26 };
+      const CHAOS = { jitter: 0.94, rotate: 18, size: 0.26 };
 
       function scatter() {
         const rect = drawer.getBoundingClientRect();
@@ -438,7 +436,7 @@ const data = items.map((i) => ({
 
   /* ---------- Index ---------- */
   .index { padding-top: 112px; }
-  .index footer { padding-bottom: 96px; } /* clear the item count */
+  .index { padding-bottom: 96px; } /* clear the item count */
   .thumbs {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 32px 28px; padding: 0 24px;
