@@ -31,7 +31,7 @@ const data = items.map((i) => ({
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script is:inline>
       // Pick the view before first paint so there is no flash of the wrong one
-      if (location.hash === "#index") document.documentElement.className = "mode-index";
+      if (location.hash === "#index" || location.hash === "#about") document.documentElement.className = "mode-" + location.hash.slice(1);
     </script>
   </head>
   <body>
@@ -40,6 +40,7 @@ const data = items.map((i) => ({
       <nav class="views">
         <a href="#drawer" data-view="drawer">Drawer view</a>
         <a href="#index" data-view="index">Index view</a>
+        <a href="#about" data-view="about">About</a>
       </nav>
     </header>
     <span class="count" aria-label={`${items.length} items`}>{String(items.length).padStart(2, "0")}</span>
@@ -88,6 +89,17 @@ const data = items.map((i) => ({
       <Footer />
     </section>
 
+    <section class="about">
+      <p>
+        An archive, mostly paper, of graphic design examples collected or found on the street,
+        kept by Jacek Rudzki.
+      </p>
+      <p>
+        Website concept bootlegged from <a href="https://www.tybura.com/junk">tybura.com/junk</a>.
+        Thanks, Emil ♥&#xFE0E;
+      </p>
+    </section>
+
     <dialog class="lightbox" tabindex="-1">
       <button type="button" class="lb-close" aria-label="Close">×</button>
       <div class="lb-stage"><img class="lb-img" alt="" /></div>
@@ -110,7 +122,8 @@ const data = items.map((i) => ({
 
       // ---------- View switch ----------
       const setView = () => {
-        root.className = location.hash === "#index" ? "mode-index" : "mode-drawer";
+        const v = location.hash.slice(1);
+        root.className = `mode-${v === "index" || v === "about" ? v : "drawer"}`;
         document.querySelectorAll<HTMLAnchorElement>(".views a").forEach((a) =>
           a.classList.toggle("active", root.classList.contains(`mode-${a.dataset.view}`))
         );
@@ -385,7 +398,15 @@ const data = items.map((i) => ({
 
   /* ---------- Views ---------- */
   .mode-drawer { overflow: hidden; }
-  .mode-drawer .index, .mode-index .drawer { display: none; }
+  .mode-drawer .index, .mode-drawer .about,
+  .mode-index .drawer, .mode-index .about,
+  .mode-about .drawer, .mode-about .index { display: none; }
+
+  /* ---------- About ---------- */
+  .about { padding: 112px 24px 96px; max-width: 520px; }
+  .about p + p { margin-top: 12px; }
+  .about a { color: inherit; }
+  @media (max-width: 600px) { .about { padding: 88px 16px 80px; } }
 
   /* ---------- Drawer ---------- */
   .drawer {
