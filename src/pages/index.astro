@@ -8,9 +8,19 @@ import logo from "../assets/logo.svg?raw";
 const items = (await getCollection("items")).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime()
 );
+// Shared by both views and the lightbox
+const data = items.map((i) => ({
+  title: i.data.title,
+  date: fmtDate(i.data.date),
+  location: i.data.location ?? "",
+  thumb: i.data.thumb,
+  full: i.data.image,
+  w: i.data.width,
+  h: i.data.height,
+}));
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" class="mode-drawer">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -19,40 +29,54 @@ const items = (await getCollection("items")).sort(
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script is:inline>
+      // Pick the view before first paint so there is no flash of the wrong one
+      if (location.hash === "#index") document.documentElement.className = "mode-index";
+    </script>
   </head>
   <body>
     <header>
-      <h1 set:html={logo} />
+      <div class="brand">
+        <h1 set:html={logo} />
+        <nav class="views">
+          <a href="#drawer" data-view="drawer">Drawer view</a>
+          <a href="#index" data-view="index">Index view</a>
+        </nav>
+      </div>
       <span class="count" aria-label={`${items.length} items`}>{String(items.length).padStart(2, "0")}</span>
     </header>
 
-    <main class="grid">
-      {items.map((item) => (
-        <figure
-          class="cell"
-          data-full={item.data.image}
-          data-thumb={item.data.thumb}
-          data-title={item.data.title}
-          data-date={fmtDate(item.data.date)}
-          data-location={item.data.location ?? ""}
-        >
-          <button type="button" class="frame" aria-label={item.data.title}>
-            <img
-              src={item.data.thumb}
-              alt={item.data.title}
-              width={item.data.width}
-              height={item.data.height}
-              loading="lazy"
-              decoding="async"
-            />
-          </button>
-          <figcaption>
-            <span class="t">{item.data.title}</span>
-            <span class="d">{fmtDate(item.data.date)}</span>
-          </figcaption>
-        </figure>
-      ))}
+    <main class="drawer" aria-label="Drawer view: drag items around, click one to open it">
+      <div class="world">
+        {data.map((d, i) => (
+          <img
+            class="thing"
+            data-i={i}
+            src={d.thumb}
+            alt={d.title}
+            width={d.w}
+            height={d.h}
+            decoding="async"
+            draggable="false"
+          />
+        ))}
+      </div>
+      <div class="zoom">
+        <button type="button" class="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" class="zoom-out" aria-label="Zoom out">−</button>
+      </div>
     </main>
+
+    <section class="index">
+      <div class="thumbs">
+        {data.map((d, i) => (
+          <button type="button" class="thumb" data-i={i} aria-label={d.title}>
+            <img src={d.thumb} alt={d.title} width={d.w} height={d.h} loading="lazy" decoding="async" />
+          </button>
+        ))}
+      </div>
+      <Footer />
+    </section>
 
     <dialog class="lightbox" tabindex="-1">
       <button type="button" class="lb-close" aria-label="Close">×</button>
@@ -67,71 +91,70 @@ const items = (await getCollection("items")).sort(
       </div>
     </dialog>
 
-    <Footer />
+    <script type="application/json" id="items-data" set:html={JSON.stringify(data)} />
 
     <script>
-      // Logo: a red → green → yellow → blue wave runs through the letters as you scroll
+      type Item = { title: string; date: string; location: string; thumb: string; full: string; w: number; h: number };
+      const items: Item[] = JSON.parse(document.getElementById("items-data")!.textContent!);
+      const root = document.documentElement;
+
+      // ---------- Logo: a red → green → yellow → blue wave runs through the letters as things move ----------
       const letters = Array.from(document.querySelectorAll<SVGPathElement>(".logo .letter"));
       const wave = ["#ff0000", "#00af4f", "#ffec00", "#0074ff"];
       const frames = letters.length + wave.length; // all black, wave enters, wave leaves
-      const STEP = 60; // px of scroll per frame
+      const STEP = 60; // px of movement per frame
+      let travel = 0;
       let lastFrame = -1;
       const paintLogo = () => {
-        const f = Math.floor(window.scrollY / STEP) % frames;
+        const f = Math.floor(travel / STEP) % frames;
         if (f === lastFrame) return;
         lastFrame = f;
         letters.forEach((l, i) => (l.style.fill = wave[f - 1 - i] ?? ""));
       };
-      window.addEventListener("scroll", () => requestAnimationFrame(paintLogo), { passive: true });
-      paintLogo();
+      const move = (px: number) => { travel += Math.abs(px); paintLogo(); };
+      let lastScroll = window.scrollY;
+      window.addEventListener("scroll", () => { move(window.scrollY - lastScroll); lastScroll = window.scrollY; }, { passive: true });
 
-      const cells = Array.from(document.querySelectorAll<HTMLElement>(".cell"));
+      // ---------- View switch ----------
+      const setView = () => {
+        root.className = location.hash === "#index" ? "mode-index" : "mode-drawer";
+        document.querySelectorAll<HTMLAnchorElement>(".views a").forEach((a) =>
+          a.classList.toggle("active", root.classList.contains(`mode-${a.dataset.view}`))
+        );
+        if (root.classList.contains("mode-drawer")) window.scrollTo(0, 0);
+      };
+      window.addEventListener("hashchange", setView);
+      setView();
 
-      // Fade-in images as they load / scroll into view
-      const io = new IntersectionObserver((entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          const img = e.target as HTMLImageElement;
-          const show = () => img.classList.add("in");
-          img.complete ? show() : img.addEventListener("load", show, { once: true });
-          io.unobserve(img);
-        }
-      }, { rootMargin: "200px" });
-      document.querySelectorAll<HTMLImageElement>(".frame img").forEach((img) => io.observe(img));
-
-      // Lightbox
+      // ---------- Lightbox ----------
       const dlg = document.querySelector<HTMLDialogElement>(".lightbox")!;
       const lbImg = dlg.querySelector<HTMLImageElement>(".lb-img")!;
       const lbTitle = dlg.querySelector(".lb-title")!;
       const lbSub = dlg.querySelector(".lb-sub")!;
-      const visible = cells;
       let idx = 0;
       let token = 0;
       const preload = (src?: string) => { if (src) new Image().src = src; };
 
       function show(i: number) {
-        if (!visible.length) return;
-        idx = (i + visible.length) % visible.length;
-        const c = visible[idx];
+        idx = (i + items.length) % items.length;
+        const it = items[idx];
         const my = ++token;
-        lbImg.src = c.dataset.thumb!; // thumbnail instantly
-        lbImg.alt = c.dataset.title!;
+        lbImg.src = it.thumb; // thumbnail instantly
+        lbImg.alt = it.title;
         const full = new Image();
         full.onload = () => { if (my === token) lbImg.src = full.src; };
-        full.src = c.dataset.full!;
-        lbTitle.textContent = c.dataset.title!;
-        lbSub.textContent = [c.dataset.date, c.dataset.location].filter(Boolean).join(" · ");
-        preload(visible[(idx + 1) % visible.length]?.dataset.full);
-        preload(visible[(idx - 1 + visible.length) % visible.length]?.dataset.full);
+        full.src = it.full;
+        lbTitle.textContent = it.title;
+        lbSub.textContent = [it.date, it.location].filter(Boolean).join(" · ");
+        preload(items[(idx + 1) % items.length].full);
+        preload(items[(idx - 1 + items.length) % items.length].full);
+      }
+      function open(i: number) {
+        show(i);
+        dlg.showModal();
+        dlg.focus(); // avoid focus ring on the close button
       }
 
-      cells.forEach((c) =>
-        c.querySelector(".frame")!.addEventListener("click", () => {
-          show(visible.indexOf(c));
-          dlg.showModal();
-          dlg.focus(); // avoid focus ring on the close button
-        })
-      );
       dlg.querySelector(".lb-prev")!.addEventListener("click", () => show(idx - 1));
       dlg.querySelector(".lb-next")!.addEventListener("click", () => show(idx + 1));
       dlg.querySelector(".lb-close")!.addEventListener("click", () => dlg.close());
@@ -144,61 +167,269 @@ const items = (await getCollection("items")).sort(
         if (e.key === "ArrowLeft") show(idx - 1);
       });
       dlg.addEventListener("close", () => (document.activeElement as HTMLElement | null)?.blur());
+
+      // ---------- Index view ----------
+      document.querySelectorAll<HTMLButtonElement>(".thumb").forEach((b) =>
+        b.addEventListener("click", () => open(+b.dataset.i!))
+      );
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const img = e.target as HTMLImageElement;
+          const show = () => img.classList.add("in");
+          img.complete ? show() : img.addEventListener("load", show, { once: true });
+          io.unobserve(img);
+        }
+      }, { rootMargin: "200px" });
+      document.querySelectorAll<HTMLImageElement>(".thumb img").forEach((img) => io.observe(img));
+
+      // ---------- Drawer view ----------
+      const drawer = document.querySelector<HTMLElement>(".drawer")!;
+      const world = drawer.querySelector<HTMLElement>(".world")!;
+      const things = Array.from(world.querySelectorAll<HTMLImageElement>(".thing"));
+      const BASE = 230; // longest side of an item, in world px
+      const MIN_ZOOM = 0.15;
+      const MAX_ZOOM = 4;
+
+      type Pos = { x: number; y: number; w: number; h: number; r: number };
+      const pos: Pos[] = [];
+      let view = { x: 0, y: 0, z: 1 }; // world → screen: screen = world * z + (x, y)
+      let top = things.length;
+
+      const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+
+      function scatter() {
+        const rect = drawer.getBoundingClientRect();
+        // Item sizes, then a world big enough that things overlap like a full drawer
+        let area = 0;
+        const sizes = items.map((it) => {
+          const s = BASE * rnd(0.8, 1.2) / Math.max(it.w, it.h);
+          const w = it.w * s, h = it.h * s;
+          area += w * h;
+          return { w, h };
+        });
+        const aspect = rect.width / rect.height;
+        const worldArea = area * 0.6;
+        const W = Math.sqrt(worldArea * aspect);
+        const H = worldArea / W;
+        // Jittered grid so the mess covers the whole drawer evenly
+        const cols = Math.max(1, Math.round(Math.sqrt(items.length * aspect)));
+        const rows = Math.ceil(items.length / cols);
+        const cw = W / cols, ch = H / rows;
+        const cells = items.map((_, i) => i).sort(() => Math.random() - 0.5);
+        sizes.forEach((s, i) => {
+          const c = cells[i];
+          const cx = (c % cols + 0.5 + rnd(-0.6, 0.6)) * cw;
+          const cy = (Math.floor(c / cols) + 0.5 + rnd(-0.6, 0.6)) * ch;
+          pos[i] = { x: cx - s.w / 2, y: cy - s.h / 2, w: s.w, h: s.h, r: rnd(-14, 14) };
+        });
+        // Random stacking order
+        const order = items.map((_, i) => i).sort(() => Math.random() - 0.5);
+        order.forEach((i, z) => (things[i].style.zIndex = String(z + 1)));
+        things.forEach((el, i) => place(el, i));
+
+        // Fit the whole mess into the drawer
+        const z = Math.max(MIN_ZOOM, Math.min(1, Math.min(rect.width / (W + BASE), rect.height / (H + BASE))));
+        view = { z, x: (rect.width - W * z) / 2, y: (rect.height - H * z) / 2 };
+        applyView();
+      }
+
+      function place(el: HTMLElement, i: number) {
+        const p = pos[i];
+        el.style.width = `${p.w}px`;
+        el.style.height = `${p.h}px`;
+        el.style.transform = `translate(${p.x}px, ${p.y}px) rotate(${p.r}deg)`;
+      }
+
+      let upgradeTimer = 0;
+      function applyView() {
+        world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+        clearTimeout(upgradeTimer);
+        upgradeTimer = window.setTimeout(upgradeVisible, 250);
+      }
+
+      // Swap in full-size images for visible items once the thumbnail would look soft
+      function upgradeVisible() {
+        const vw = drawer.clientWidth, vh = drawer.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        things.forEach((el, i) => {
+          if (el.dataset.upgraded) return;
+          const p = pos[i];
+          if (Math.max(p.w, p.h) * view.z * dpr <= 480) return;
+          const sx = p.x * view.z + view.x, sy = p.y * view.z + view.y;
+          if (sx > vw || sy > vh || sx + p.w * view.z < 0 || sy + p.h * view.z < 0) return;
+          el.dataset.upgraded = "1";
+          const full = new Image();
+          full.onload = () => (el.src = full.src);
+          full.src = items[i].full;
+        });
+      }
+
+      function zoomAt(factor: number, sx: number, sy: number) {
+        const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, view.z * factor));
+        const k = z / view.z;
+        view = { z, x: sx - (sx - view.x) * k, y: sy - (sy - view.y) * k };
+        applyView();
+      }
+      const zoomCenter = (f: number) => zoomAt(f, drawer.clientWidth / 2, drawer.clientHeight / 2);
+      drawer.querySelector(".zoom-in")!.addEventListener("click", () => zoomCenter(1.4));
+      drawer.querySelector(".zoom-out")!.addEventListener("click", () => zoomCenter(1 / 1.4));
+
+      // Trackpad: two-finger scroll pans, pinch (ctrl+wheel) zooms
+      drawer.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const r = drawer.getBoundingClientRect();
+        if (e.ctrlKey) {
+          zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+        } else {
+          view.x -= e.deltaX;
+          view.y -= e.deltaY;
+          applyView();
+          move(Math.hypot(e.deltaX, e.deltaY));
+        }
+      }, { passive: false });
+
+      // Pointer: drag an item to move it, drag the background to pan, click an item to open it
+      type Drag = { id: number; i: number; sx: number; sy: number; ox: number; oy: number; moved: boolean; lx: number; ly: number };
+      let drag: Drag | null = null;
+      drawer.addEventListener("pointerdown", (e) => {
+        if ((e.target as HTMLElement).closest(".zoom")) return;
+        const el = (e.target as HTMLElement).closest<HTMLElement>(".thing");
+        const i = el ? +el.dataset.i! : -1;
+        drag = {
+          id: e.pointerId, i, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY,
+          ox: i >= 0 ? pos[i].x : view.x, oy: i >= 0 ? pos[i].y : view.y, moved: false,
+        };
+        drawer.setPointerCapture(e.pointerId);
+        drawer.classList.add("grabbing");
+      });
+      drawer.addEventListener("pointermove", (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+        if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+        if (!drag.moved && drag.i >= 0) things[drag.i].style.zIndex = String(++top); // lift to the top
+        drag.moved = true;
+        move(Math.hypot(e.clientX - drag.lx, e.clientY - drag.ly));
+        drag.lx = e.clientX; drag.ly = e.clientY;
+        if (drag.i >= 0) {
+          pos[drag.i].x = drag.ox + dx / view.z;
+          pos[drag.i].y = drag.oy + dy / view.z;
+          place(things[drag.i], drag.i);
+        } else {
+          view.x = drag.ox + dx;
+          view.y = drag.oy + dy;
+          applyView();
+        }
+      });
+      const endDrag = (e: PointerEvent) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        if (!drag.moved && drag.i >= 0 && e.type === "pointerup") open(drag.i);
+        drag = null;
+        drawer.classList.remove("grabbing");
+      };
+      drawer.addEventListener("pointerup", endDrag);
+      drawer.addEventListener("pointercancel", endDrag);
+
+      // Keyboard: +/- zoom while in drawer view
+      document.addEventListener("keydown", (e) => {
+        if (dlg.open || !root.classList.contains("mode-drawer")) return;
+        if (e.key === "+" || e.key === "=") zoomCenter(1.4);
+        if (e.key === "-") zoomCenter(1 / 1.4);
+      });
+
+      scatter();
+      paintLogo();
     </script>
   </body>
 </html>
 
 <style is:global>
-  :root {
-    --bg: #fff;
-    --fg: #000;
-    --muted: #000;
-    --line: #eee;
-    font-family: "Courier New", Courier, ui-monospace, monospace;
-    font-weight: 700;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--fg); font-size: 10px; line-height: 12px; text-transform: uppercase; }
-  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-  :focus:not(:focus-visible) { outline: none; }
-  :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
-
   @font-face {
     font-family: "Dotfont";
     src: url("/fonts/dotfont-digits.woff2") format("woff2");
     font-display: block;
   }
+  :root {
+    --bg: #fff;
+    --fg: #000;
+    --header: 112px;
+    font-family: "Courier New", Courier, ui-monospace, monospace;
+    font-weight: 700;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg); font-size: 10px; line-height: 12px; text-transform: uppercase; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-transform: inherit; }
+  :focus:not(:focus-visible) { outline: none; }
+  :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
+
+  /* ---------- Header ---------- */
   header {
-    position: sticky; top: 0; z-index: 5; background: var(--bg);
-    display: flex; justify-content: space-between; align-items: center;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--bg);
+    height: var(--header);
+    display: flex; justify-content: space-between; align-items: flex-start;
     padding: 24px; gap: 16px;
   }
+  .mode-index header { position: sticky; }
   h1 { font-size: 0; line-height: 0; }
   .logo { display: block; width: 200px; height: auto; }
   /* Digits in Dotfont are ~0.8em tall, so 50px matches the 40px logo */
   .count { font-family: "Dotfont", monospace; font-size: 50px; line-height: 40px; height: 40px; color: #000; }
-  @media (max-width: 600px) { .logo { width: 160px; } .count { font-size: 40px; line-height: 32px; height: 32px; } }
+  .views { display: flex; flex-direction: column; margin-top: 10px; }
+  .views a { color: inherit; text-decoration: none; width: fit-content; }
+  .views a.active, .views a:hover { text-decoration: underline; }
 
-
-  .grid {
-    display: grid; grid-template-columns: repeat(6, 1fr);
-    gap: 28px 20px; padding: 0 24px;
+  @media (max-width: 600px) {
+    :root { --header: 92px; }
+    header { padding: 16px; }
+    .logo { width: 160px; }
+    .count { font-size: 40px; line-height: 32px; height: 32px; }
+    .views { margin-top: 8px; }
   }
-  @media (max-width: 1280px) { .grid { grid-template-columns: repeat(5, 1fr); } }
-  @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 600px) { header { padding: 16px; } .grid { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; padding: 0 16px; } }
 
-  .frame { display: block; position: relative; width: 100%; padding-top: 100%; }
-  .frame img {
-    position: absolute; inset: 10%; width: 80%; height: 80%;
-    object-fit: contain; opacity: 0; transition: opacity .5s ease;
+  /* ---------- Views ---------- */
+  .mode-drawer { overflow: hidden; }
+  .mode-drawer .index, .mode-index .drawer { display: none; }
+
+  /* ---------- Drawer ---------- */
+  .drawer {
+    position: fixed; left: 0; right: 0; bottom: 0; top: var(--header);
+    overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+    cursor: grab;
   }
-  .frame img.in { opacity: 1; }
-  .frame:hover img { transform: scale(1.03); transition: transform .3s ease, opacity .5s ease; }
-  figcaption { display: flex; flex-direction: column; margin-top: 8px; font-size: 10px; line-height: 12px; text-align: center; }
+  .drawer.grabbing, .drawer.grabbing .thing { cursor: grabbing; }
+  .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .thing {
+    position: absolute; left: 0; top: 0; display: block; object-fit: contain;
+    cursor: grab; -webkit-user-drag: none;
+  }
+  .zoom {
+    position: absolute; right: 24px; bottom: 24px; z-index: 10;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .zoom button {
+    width: 36px; height: 36px; font-size: 20px; line-height: 1;
+    background: var(--bg); border: 1.5px solid var(--fg); cursor: pointer;
+  }
+  .zoom button:active { background: var(--fg); color: var(--bg); }
+  @media (max-width: 600px) { .zoom { right: 16px; bottom: 16px; } }
 
+  /* ---------- Index ---------- */
+  .thumbs {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 16px; padding: 8px 24px 0;
+  }
+  @media (max-width: 600px) { .thumbs { grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 8px 16px 0; } }
+  .thumb { display: block; position: relative; width: 100%; padding-top: 100%; }
+  .thumb img {
+    position: absolute; inset: 6%; width: 88%; height: 88%;
+    object-fit: contain; opacity: 0; transition: opacity .5s ease, transform .3s ease;
+  }
+  .thumb img.in { opacity: 1; }
+  .thumb:hover img { transform: scale(1.06); }
+
+  /* ---------- Lightbox ---------- */
   dialog.lightbox {
-    margin: auto; border: 0; padding: 0; background: var(--bg);
+    margin: auto; border: 0; padding: 0; background: var(--bg); color: var(--fg);
     width: 100vw; height: 100dvh; max-width: none; max-height: none;
   }
   dialog.lightbox::backdrop { background: var(--bg); }
@@ -208,6 +439,5 @@ const items = (await getCollection("items")).sort(
   .lb-img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .lb-bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px 24px; gap: 16px; }
   .lb-bar button { font-size: 20px; padding: 4px 12px; }
-  .lb-meta { text-align: center; display: flex; flex-direction: column; }
-  .lb-meta { font-size: 10px; line-height: 12px; }
+  .lb-meta { text-align: center; display: flex; flex-direction: column; font-size: 10px; line-height: 12px; }
 </style>
