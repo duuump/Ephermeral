@@ -1,7 +1,6 @@
 ---
 import { getCollection } from "astro:content";
 import config from "../../site.config.json";
-import { fmtDate } from "../lib/date";
 import logo from "../assets/logo.svg?raw";
 
 const items = (await getCollection("items")).sort(
@@ -10,7 +9,6 @@ const items = (await getCollection("items")).sort(
 // Shared by both views and the lightbox
 const data = items.map((i) => ({
   title: i.data.title,
-  date: fmtDate(i.data.date),
   location: i.data.location ?? "",
   thumb: i.data.thumb,
   full: i.data.image,
@@ -80,7 +78,6 @@ const data = items.map((i) => ({
             </button>
             <figcaption>
               <span>{d.title}</span>
-              <span>{d.date}</span>
             </figcaption>
           </figure>
         ))}
@@ -114,7 +111,7 @@ const data = items.map((i) => ({
     <script type="application/json" id="items-data" set:html={JSON.stringify(data)} />
 
     <script>
-      type Item = { title: string; date: string; location: string; thumb: string; full: string; w: number; h: number };
+      type Item = { title: string; location: string; thumb: string; full: string; w: number; h: number };
       const items: Item[] = JSON.parse(document.getElementById("items-data")!.textContent!);
       const root = document.documentElement;
 
@@ -149,7 +146,7 @@ const data = items.map((i) => ({
         full.onload = () => { if (my === token) lbImg.src = full.src; };
         full.src = it.full;
         lbTitle.textContent = it.title;
-        lbSub.textContent = [it.date, it.location].filter(Boolean).join(" · ");
+        lbSub.textContent = it.location;
         preload(items[(idx + 1) % items.length].full);
         preload(items[(idx - 1 + items.length) % items.length].full);
       }
