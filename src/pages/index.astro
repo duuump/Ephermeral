@@ -151,13 +151,14 @@ const items = (await getCollection("items")).sort(
 <style is:global>
   :root {
     --bg: #fff;
-    --fg: #111;
-    --muted: #888;
+    --fg: #000;
+    --muted: #000;
     --line: #eee;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-family: "Courier New", Courier, ui-monospace, monospace;
+    font-weight: 700;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.4; }
+  body { background: var(--bg); color: var(--fg); font-size: 10px; line-height: 12px; text-transform: uppercase; }
   button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
   :focus:not(:focus-visible) { outline: none; }
   :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
@@ -194,8 +195,7 @@ const items = (await getCollection("items")).sort(
   }
   .frame img.in { opacity: 1; }
   .frame:hover img { transform: scale(1.03); transition: transform .3s ease, opacity .5s ease; }
-  figcaption { display: flex; flex-direction: column; margin-top: 8px; font-size: 12px; }
-  figcaption .d { color: var(--muted); }
+  figcaption { display: flex; flex-direction: column; margin-top: 8px; font-size: 10px; line-height: 12px; text-align: center; }
 
   dialog.lightbox {
     margin: auto; border: 0; padding: 0; background: var(--bg);
@@ -209,5 +209,5 @@ const items = (await getCollection("items")).sort(
   .lb-bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px 24px; gap: 16px; }
   .lb-bar button { font-size: 20px; padding: 4px 12px; }
   .lb-meta { text-align: center; display: flex; flex-direction: column; }
-  .lb-sub { color: var(--muted); font-size: 12px; }
+  .lb-meta { font-size: 10px; line-height: 12px; }
 </style>
