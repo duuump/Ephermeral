@@ -52,7 +52,9 @@ async function handleMessage(msg) {
       text:
         "Send a photo (caption = title) and it will appear on the site.\n" +
         "Send it as a File to keep the GPS location.\n" +
-        "Start the caption with /raw to keep the background.\n\n" +
+        "Start the caption with /raw to keep the background.\n" +
+        "For a PNG with your own transparency: send it as a File with a /raw caption.\n\n" +
+        "Reply to my confirmation with a new photo to replace that item.\n" +
         "/title New title — reply to my confirmation to rename an item\n" +
         "/delete — reply to my confirmation to remove an item\n" +
         "/stats — collection stats",
@@ -76,13 +78,17 @@ async function handleMessage(msg) {
   const raw = /^\/raw\b/i.test((msg.caption || "").trim());
 
   // 3. Background removal. Upright + capped input keeps the upload small.
-  const input = await sharp(original)
+  // A /raw image that already has transparency (e.g. a PNG cut out in Photoshop) stays PNG,
+  // since JPEG would turn the transparent areas black.
+  const keepAlpha = raw && meta.hasAlpha;
+  const resized = sharp(original)
     .rotate()
-    .resize({ width: 2560, height: 2560, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 92 })
-    .toBuffer();
+    .resize({ width: 2560, height: 2560, fit: "inside", withoutEnlargement: true });
+  const input = await (keepAlpha ? resized.png() : resized.jpeg({ quality: 92 })).toBuffer();
   let trimmed = input;
-  if (!raw) {
+  if (keepAlpha) {
+    trimmed = await sharp(input).trim().png().toBuffer().catch(() => input);
+  } else if (!raw) {
     const cutoutUrl = await removeBackground(input);
     const cutoutRes = await fetch(cutoutUrl);
     if (!cutoutRes.ok) throw new Error(`Downloading cutout: HTTP ${cutoutRes.status}`);
@@ -105,10 +111,13 @@ async function handleMessage(msg) {
   const color = "#" + [dominant.r, dominant.g, dominant.b].map((v) => v.toString(16).padStart(2, "0")).join("");
 
   // 5. Commit image + thumb + JSON in one commit.
-  // Slug is derived from the message id, so a re-delivered update overwrites instead of duplicating.
-  const date = new Date(msg.date * 1000);
-  const slug = `${date.toISOString().slice(0, 10).replace(/-/g, "")}-${msg.message_id.toString(36).padStart(4, "0")}`;
-  const title = (msg.caption || "").trim().replace(/^\/raw\b\s*/i, "") || "untitled";
+  // A photo sent as a reply to one of my confirmations replaces that item (keeping its title and date).
+  // Otherwise the slug is derived from the message id, so a re-delivered update overwrites instead of duplicating.
+  const replaceSlug = (msg.reply_to_message?.caption || msg.reply_to_message?.text || "").match(/slug:\s*(\S+)/)?.[1];
+  const existing = replaceSlug ? await readItem(replaceSlug) : null;
+  const date = existing ? new Date(existing.date) : new Date(msg.date * 1000);
+  const slug = replaceSlug || `${date.toISOString().slice(0, 10).replace(/-/g, "")}-${msg.message_id.toString(36).padStart(4, "0")}`;
+  const title = (msg.caption || "").trim().replace(/^\/raw\b\s*/i, "") || existing?.title || "untitled";
   const item = {
     title,
     date: date.toISOString(),
@@ -120,7 +129,11 @@ async function handleMessage(msg) {
     ...(location ? { location } : {}),
     ...(gps ? { lat: round(gps.lat), lng: round(gps.lng) } : {}),
   };
-  await commit(`Add ${slug}: ${title}`, [
+  // A replacement without GPS keeps the place it was originally found
+  if (existing && !gps) {
+    for (const k of ["location", "lat", "lng"]) if (existing[k] !== undefined) item[k] = existing[k];
+  }
+  await commit(`${existing ? "Replace" : "Add"} ${slug}: ${title}`, [
     { path: `public/${COLL}/${slug}.webp`, content: full.data },
     { path: `public/${COLL}/${slug}-thumb.webp`, content: thumb },
     { path: `src/content/${COLL}/${slug}.json`, content: Buffer.from(JSON.stringify(item, null, 2) + "\n") },
@@ -133,7 +146,7 @@ async function handleMessage(msg) {
     .jpeg({ quality: 85 })
     .toBuffer();
   const caption = [
-    `✅ ${title}`,
+    `${existing ? "🔁 Replaced:" : "✅"} ${title}`,
     location && `📍 ${location}`,
     "Live on the site in ~2 min.",
     `slug: ${slug}`,
@@ -165,14 +178,19 @@ async function handleTitle(msg) {
     return tg("sendMessage", { chat_id, text: "Reply to my confirmation message with: /title New title" });
   }
   const path = `src/content/${COLL}/${slug}.json`;
-  const { default_branch } = await gh(`/repos/${GH_REPO}`);
-  const file = await gh(`/repos/${GH_REPO}/contents/${path}?ref=${encodeURIComponent(default_branch)}`);
-  const item = JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
+  const item = await readItem(slug);
   item.title = title;
   await commit(`Rename ${slug}: ${title}`, [
     { path, content: Buffer.from(JSON.stringify(item, null, 2) + "\n") },
   ]);
   await tg("sendMessage", { chat_id, text: `✏️ Renamed to “${title}”. Updated on the site in ~2 min.\nslug: ${slug}` });
+}
+
+async function readItem(slug) {
+  const { default_branch } = await gh(`/repos/${GH_REPO}`);
+  const path = `src/content/${COLL}/${slug}.json`;
+  const file = await gh(`/repos/${GH_REPO}/contents/${path}?ref=${encodeURIComponent(default_branch)}`);
+  return JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
 }
 
 async function handleStats(chat_id) {
