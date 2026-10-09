@@ -36,15 +36,13 @@ const data = items.map((i) => ({
   </head>
   <body>
     <header>
-      <div class="brand">
-        <h1 set:html={logo} />
-        <nav class="views">
-          <a href="#drawer" data-view="drawer">Drawer view</a>
-          <a href="#index" data-view="index">Index view</a>
-        </nav>
-      </div>
-      <span class="count" aria-label={`${items.length} items`}>{String(items.length).padStart(2, "0")}</span>
+      <h1 set:html={logo} />
+      <nav class="views">
+        <a href="#drawer" data-view="drawer">Drawer view</a>
+        <a href="#index" data-view="index">Index view</a>
+      </nav>
     </header>
+    <span class="count" aria-label={`${items.length} items`}>{String(items.length).padStart(2, "0")}</span>
 
     <main class="drawer" aria-label="Drawer view: drag items around, click one to open it">
       <div class="world">
@@ -70,9 +68,15 @@ const data = items.map((i) => ({
     <section class="index">
       <div class="thumbs">
         {data.map((d, i) => (
-          <button type="button" class="thumb" data-i={i} aria-label={d.title}>
-            <img src={d.thumb} alt={d.title} width={d.w} height={d.h} loading="lazy" decoding="async" />
-          </button>
+          <figure class="cell">
+            <button type="button" class="thumb" data-i={i} aria-label={d.title}>
+              <img src={d.thumb} alt={d.title} width={d.w} height={d.h} loading="lazy" decoding="async" />
+            </button>
+            <figcaption>
+              <span>{d.title}</span>
+              <span>{d.date}</span>
+            </figcaption>
+          </figure>
         ))}
       </div>
       <Footer />
@@ -97,23 +101,6 @@ const data = items.map((i) => ({
       type Item = { title: string; date: string; location: string; thumb: string; full: string; w: number; h: number };
       const items: Item[] = JSON.parse(document.getElementById("items-data")!.textContent!);
       const root = document.documentElement;
-
-      // ---------- Logo: a red → green → yellow → blue wave runs through the letters as things move ----------
-      const letters = Array.from(document.querySelectorAll<SVGPathElement>(".logo .letter"));
-      const wave = ["#ff0000", "#00af4f", "#ffec00", "#0074ff"];
-      const frames = letters.length + wave.length; // all black, wave enters, wave leaves
-      const STEP = 60; // px of movement per frame
-      let travel = 0;
-      let lastFrame = -1;
-      const paintLogo = () => {
-        const f = Math.floor(travel / STEP) % frames;
-        if (f === lastFrame) return;
-        lastFrame = f;
-        letters.forEach((l, i) => (l.style.fill = wave[f - 1 - i] ?? ""));
-      };
-      const move = (px: number) => { travel += Math.abs(px); paintLogo(); };
-      let lastScroll = window.scrollY;
-      window.addEventListener("scroll", () => { move(window.scrollY - lastScroll); lastScroll = window.scrollY; }, { passive: true });
 
       // ---------- View switch ----------
       const setView = () => {
@@ -187,7 +174,7 @@ const data = items.map((i) => ({
       const drawer = document.querySelector<HTMLElement>(".drawer")!;
       const world = drawer.querySelector<HTMLElement>(".world")!;
       const things = Array.from(world.querySelectorAll<HTMLImageElement>(".thing"));
-      const BASE = 230; // longest side of an item, in world px
+      const BASE = window.innerWidth < 600 ? 150 : 230; // longest side of an item, in world px
       const MIN_ZOOM = 0.15;
       const MAX_ZOOM = 4;
 
@@ -208,10 +195,10 @@ const data = items.map((i) => ({
           area += w * h;
           return { w, h };
         });
-        const aspect = rect.width / rect.height;
-        const worldArea = area * 0.6;
-        const W = Math.sqrt(worldArea * aspect);
-        const H = worldArea / W;
+        // The drawer is exactly one screen tall and grows sideways as the collection grows
+        const H = rect.height;
+        const W = Math.max(rect.width, (area * 0.6) / H);
+        const aspect = W / H;
         // Jittered grid so the mess covers the whole drawer evenly
         const cols = Math.max(1, Math.round(Math.sqrt(items.length * aspect)));
         const rows = Math.ceil(items.length / cols);
@@ -228,9 +215,8 @@ const data = items.map((i) => ({
         order.forEach((i, z) => (things[i].style.zIndex = String(z + 1)));
         things.forEach((el, i) => place(el, i));
 
-        // Fit the whole mess into the drawer
-        const z = Math.max(MIN_ZOOM, Math.min(1, Math.min(rect.width / (W + BASE), rect.height / (H + BASE))));
-        view = { z, x: (rect.width - W * z) / 2, y: (rect.height - H * z) / 2 };
+        // Start at full size, centred on the middle of the pile
+        view = { z: 1, x: (rect.width - W) / 2, y: 0 };
         applyView();
       }
 
@@ -285,19 +271,18 @@ const data = items.map((i) => ({
           view.x -= e.deltaX;
           view.y -= e.deltaY;
           applyView();
-          move(Math.hypot(e.deltaX, e.deltaY));
         }
       }, { passive: false });
 
       // Pointer: drag an item to move it, drag the background to pan, click an item to open it
-      type Drag = { id: number; i: number; sx: number; sy: number; ox: number; oy: number; moved: boolean; lx: number; ly: number };
+      type Drag = { id: number; i: number; sx: number; sy: number; ox: number; oy: number; moved: boolean };
       let drag: Drag | null = null;
       drawer.addEventListener("pointerdown", (e) => {
         if ((e.target as HTMLElement).closest(".zoom")) return;
         const el = (e.target as HTMLElement).closest<HTMLElement>(".thing");
         const i = el ? +el.dataset.i! : -1;
         drag = {
-          id: e.pointerId, i, sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY,
+          id: e.pointerId, i, sx: e.clientX, sy: e.clientY,
           ox: i >= 0 ? pos[i].x : view.x, oy: i >= 0 ? pos[i].y : view.y, moved: false,
         };
         drawer.setPointerCapture(e.pointerId);
@@ -309,8 +294,6 @@ const data = items.map((i) => ({
         if (!drag.moved && Math.hypot(dx, dy) < 5) return;
         if (!drag.moved && drag.i >= 0) things[drag.i].style.zIndex = String(++top); // lift to the top
         drag.moved = true;
-        move(Math.hypot(e.clientX - drag.lx, e.clientY - drag.ly));
-        drag.lx = e.clientX; drag.ly = e.clientY;
         if (drag.i >= 0) {
           pos[drag.i].x = drag.ox + dx / view.z;
           pos[drag.i].y = drag.oy + dy / view.z;
@@ -338,7 +321,6 @@ const data = items.map((i) => ({
       });
 
       scatter();
-      paintLogo();
     </script>
   </body>
 </html>
@@ -352,7 +334,6 @@ const data = items.map((i) => ({
   :root {
     --bg: #fff;
     --fg: #000;
-    --header: 112px;
     font-family: "Courier New", Courier, ui-monospace, monospace;
     font-weight: 700;
   }
@@ -363,27 +344,29 @@ const data = items.map((i) => ({
   :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
 
   /* ---------- Header ---------- */
+  /* Logo, nav and count float on top of everything, no background */
   header {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--bg);
-    height: var(--header);
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20; pointer-events: none;
     display: flex; justify-content: space-between; align-items: flex-start;
     padding: 24px; gap: 16px;
   }
-  .mode-index header { position: sticky; }
+  header > * { pointer-events: auto; }
   h1 { font-size: 0; line-height: 0; }
   .logo { display: block; width: 200px; height: auto; }
   /* Digits in Dotfont are ~0.8em tall, so 50px matches the 40px logo */
-  .count { font-family: "Dotfont", monospace; font-size: 50px; line-height: 40px; height: 40px; color: #000; }
-  .views { display: flex; flex-direction: column; margin-top: 10px; }
+  .count {
+    position: fixed; left: 24px; bottom: 24px; z-index: 20;
+    font-family: "Dotfont", monospace; font-size: 50px; line-height: 40px; height: 40px; color: #000;
+  }
+  .views { display: flex; gap: 24px; }
   .views a { color: inherit; text-decoration: none; width: fit-content; }
   .views a.active, .views a:hover { text-decoration: underline; }
 
   @media (max-width: 600px) {
-    :root { --header: 92px; }
     header { padding: 16px; }
     .logo { width: 160px; }
-    .count { font-size: 40px; line-height: 32px; height: 32px; }
-    .views { margin-top: 8px; }
+    .count { left: 16px; bottom: 16px; font-size: 40px; line-height: 32px; height: 32px; }
+    .views { flex-direction: column; gap: 0; align-items: flex-end; }
   }
 
   /* ---------- Views ---------- */
@@ -392,7 +375,7 @@ const data = items.map((i) => ({
 
   /* ---------- Drawer ---------- */
   .drawer {
-    position: fixed; left: 0; right: 0; bottom: 0; top: var(--header);
+    position: fixed; inset: 0;
     overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
     cursor: grab;
   }
@@ -414,11 +397,17 @@ const data = items.map((i) => ({
   @media (max-width: 600px) { .zoom { right: 16px; bottom: 16px; } }
 
   /* ---------- Index ---------- */
+  .index { padding-top: 112px; }
+  .index footer { padding-bottom: 96px; } /* clear the item count */
   .thumbs {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 16px; padding: 8px 24px 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 32px 28px; padding: 0 24px;
   }
-  @media (max-width: 600px) { .thumbs { grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 8px 16px 0; } }
+  .cell figcaption { display: flex; flex-direction: column; margin-top: 8px; text-align: center; }
+  @media (max-width: 600px) {
+    .index { padding-top: 88px; }
+    .thumbs { grid-template-columns: repeat(3, 1fr); gap: 24px 16px; padding: 0 16px; }
+  }
   .thumb { display: block; position: relative; width: 100%; padding-top: 100%; }
   .thumb img {
     position: absolute; inset: 6%; width: 88%; height: 88%;
