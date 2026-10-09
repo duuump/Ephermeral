@@ -62,6 +62,12 @@ const data = items.map((i) => ({
       <div class="zoom">
         <button type="button" class="zoom-in" aria-label="Zoom in">+</button>
         <button type="button" class="zoom-out" aria-label="Zoom out">−</button>
+        <button type="button" class="shuffle" aria-label="Shuffle the drawer">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+            <path d="M20 3v5h-5" />
+          </svg>
+        </button>
       </div>
     </main>
 
@@ -260,6 +266,14 @@ const data = items.map((i) => ({
       const zoomCenter = (f: number) => zoomAt(f, drawer.clientWidth / 2, drawer.clientHeight / 2);
       drawer.querySelector(".zoom-in")!.addEventListener("click", () => zoomCenter(1.4));
       drawer.querySelector(".zoom-out")!.addEventListener("click", () => zoomCenter(1 / 1.4));
+      // Shuffle: everything slides to a new random spot
+      let shuffleTimer = 0;
+      drawer.querySelector(".shuffle")!.addEventListener("click", () => {
+        drawer.classList.add("shuffling");
+        scatter();
+        clearTimeout(shuffleTimer);
+        shuffleTimer = window.setTimeout(() => drawer.classList.remove("shuffling"), 700);
+      });
 
       // Trackpad: two-finger scroll pans, pinch (ctrl+wheel) zooms
       drawer.addEventListener("wheel", (e) => {
@@ -393,7 +407,9 @@ const data = items.map((i) => ({
     width: 36px; height: 36px; font-size: 20px; line-height: 1;
     background: var(--bg); border: 1.5px solid var(--fg); cursor: pointer;
   }
+  .zoom button { display: flex; align-items: center; justify-content: center; }
   .zoom button:active { background: var(--fg); color: var(--bg); }
+  .shuffling .world, .shuffling .thing { transition: transform .6s cubic-bezier(.2, .8, .2, 1); }
   @media (max-width: 600px) { .zoom { right: 16px; bottom: 16px; } }
 
   /* ---------- Index ---------- */
