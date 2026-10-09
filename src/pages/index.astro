@@ -204,12 +204,15 @@ const data = items.map((i) => ({
 
       const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
+      // How messy the drawer is (position jitter in cells, rotation in degrees, size spread)
+      const CHAOS = { jitter: 0.78, rotate: 18, size: 0.26 };
+
       function scatter() {
         const rect = drawer.getBoundingClientRect();
         // Item sizes, then a world big enough that things overlap like a full drawer
         let area = 0;
         const sizes = items.map((it) => {
-          const s = BASE * rnd(0.8, 1.2) / Math.max(it.w, it.h);
+          const s = BASE * rnd(1 - CHAOS.size, 1 + CHAOS.size) / Math.max(it.w, it.h);
           const w = it.w * s, h = it.h * s;
           area += w * h;
           return { w, h };
@@ -225,9 +228,9 @@ const data = items.map((i) => ({
         const cells = items.map((_, i) => i).sort(() => Math.random() - 0.5);
         sizes.forEach((s, i) => {
           const c = cells[i];
-          const cx = (c % cols + 0.5 + rnd(-0.6, 0.6)) * cw;
-          const cy = (Math.floor(c / cols) + 0.5 + rnd(-0.6, 0.6)) * ch;
-          pos[i] = { x: cx - s.w / 2, y: cy - s.h / 2, w: s.w, h: s.h, r: rnd(-14, 14) };
+          const cx = (c % cols + 0.5 + rnd(-CHAOS.jitter, CHAOS.jitter)) * cw;
+          const cy = (Math.floor(c / cols) + 0.5 + rnd(-CHAOS.jitter, CHAOS.jitter)) * ch;
+          pos[i] = { x: cx - s.w / 2, y: cy - s.h / 2, w: s.w, h: s.h, r: rnd(-CHAOS.rotate, CHAOS.rotate) };
         });
         // Random stacking order
         const order = items.map((_, i) => i).sort(() => Math.random() - 0.5);
