@@ -23,6 +23,7 @@ const items = (await getCollection("items")).sort(
   <body>
     <header>
       <h1 set:html={logo} />
+      <span class="count" aria-label={`${items.length} items`}>{String(items.length).padStart(2, "0")}</span>
     </header>
 
     <main class="grid">
@@ -161,20 +162,28 @@ const items = (await getCollection("items")).sort(
   :focus:not(:focus-visible) { outline: none; }
   :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
 
+  @font-face {
+    font-family: "Dotfont";
+    src: url("/fonts/dotfont-digits.woff2") format("woff2");
+    font-display: block;
+  }
   header {
     position: sticky; top: 0; z-index: 5; background: var(--bg);
-    display: flex; justify-content: space-between; align-items: baseline;
+    display: flex; justify-content: space-between; align-items: center;
     padding: 24px; gap: 16px;
   }
   h1 { font-size: 0; line-height: 0; }
   .logo { display: block; width: 200px; height: auto; }
-  @media (max-width: 600px) { .logo { width: 160px; } }
+  /* Digits in Dotfont are ~0.8em tall, so 50px matches the 40px logo */
+  .count { font-family: "Dotfont", monospace; font-size: 50px; line-height: 40px; height: 40px; color: #000; }
+  @media (max-width: 600px) { .logo { width: 160px; } .count { font-size: 40px; line-height: 32px; height: 32px; } }
 
 
   .grid {
-    display: grid; grid-template-columns: repeat(5, 1fr);
-    gap: 32px 24px; padding: 0 24px;
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 28px 20px; padding: 0 24px;
   }
+  @media (max-width: 1280px) { .grid { grid-template-columns: repeat(5, 1fr); } }
   @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 600px) { header { padding: 16px; } .grid { grid-template-columns: repeat(2, 1fr); gap: 24px 16px; padding: 0 16px; } }
 
