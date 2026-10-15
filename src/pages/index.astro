@@ -440,13 +440,13 @@ const data = items.map((i) => ({
   .drawer {
     position: fixed; inset: 0;
     overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
-    cursor: grab;
+    cursor: url("/cursors/grab.svg") 24 24, grab; /* hand at twice the system size */
   }
-  .drawer.grabbing, .drawer.grabbing .thing { cursor: grabbing; }
+  .drawer.grabbing, .drawer.grabbing .thing { cursor: url("/cursors/grabbing.svg") 24 24, grabbing; }
   .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
   .thing {
     position: absolute; left: 0; top: 0; display: block; object-fit: contain;
-    cursor: grab; -webkit-user-drag: none;
+    cursor: url("/cursors/grab.svg") 24 24, grab; -webkit-user-drag: none;
   }
   .zoom {
     position: absolute; right: 24px; bottom: 24px; z-index: 10;
