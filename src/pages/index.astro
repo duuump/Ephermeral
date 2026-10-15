@@ -58,12 +58,14 @@ const data = items.map((i) => ({
         ))}
       </div>
       <div class="zoom">
-        <span class="hint"><span class="mod">⌘</span> + scroll zoom</span>
-        <span class="hint">+ zoom in</span>
+        <ul class="hints" aria-label="Keyboard shortcuts">
+          <li>+ zoom in</li>
+          <li>− zoom out</li>
+          <li>R shuffle</li>
+          <li>0 centre 100%</li>
+        </ul>
         <button type="button" class="zoom-in" aria-label="Zoom in">+</button>
-        <span class="hint">− zoom out</span>
         <button type="button" class="zoom-out" aria-label="Zoom out">−</button>
-        <span class="hint">R shuffle</span>
         <button type="button" class="shuffle" aria-label="Shuffle the drawer">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" aria-hidden="true">
             <path d="M20 12a8 8 0 1 1-2.34-5.66" />
@@ -193,7 +195,7 @@ const data = items.map((i) => ({
       const world = drawer.querySelector<HTMLElement>(".world")!;
       const things = Array.from(world.querySelectorAll<HTMLImageElement>(".thing"));
       const BASE = window.innerWidth < 600 ? 150 : 230; // longest side of an item, in world px
-      const SLACK = 60; // how far past the edge of the pile you can drag, in screen px
+      const SLACK = 300; // how far past the edge of the pile you can drag, in screen px
       const MAX_ZOOM = 4;
 
       type Pos = { x: number; y: number; w: number; h: number; r: number };
@@ -250,12 +252,10 @@ const data = items.map((i) => ({
       // You can zoom out until the whole pile fits, but not further
       const minZoom = () => Math.min(1, drawer.clientWidth / size.W, drawer.clientHeight / size.H);
 
-      // Keep the pile on screen: no drifting off into empty white canvas
+      // Keep the pile on screen: at most SLACK px of empty canvas on any side (room to set things aside)
       function clampView() {
         const axis = (at: number, extent: number, screen: number) =>
-          extent <= screen
-            ? (screen - extent) / 2
-            : Math.min(SLACK, Math.max(screen - extent - SLACK, at));
+          Math.min(Math.max(0, screen - extent) + SLACK, Math.max(Math.min(0, screen - extent) - SLACK, at));
         view.x = axis(view.x, size.W * view.z, drawer.clientWidth);
         view.y = axis(view.y, size.H * view.z, drawer.clientHeight);
       }
@@ -375,11 +375,6 @@ const data = items.map((i) => ({
       });
       window.addEventListener("resize", () => applyView());
 
-      // Show Ctrl instead of ⌘ outside Apple devices
-      if (!/Mac|iPhone|iPad/.test(navigator.platform)) {
-        document.querySelectorAll(".zoom .mod").forEach((m) => (m.textContent = "Ctrl"));
-      }
-
       scatter();
     </script>
   </body>
@@ -455,12 +450,17 @@ const data = items.map((i) => ({
   }
   .zoom {
     position: absolute; right: 24px; bottom: 24px; z-index: 10;
-    display: grid; grid-template-columns: auto 36px; gap: 6px 8px; align-items: center;
+    display: grid; grid-template-columns: auto 36px; gap: 6px 12px;
   }
-  .hint { grid-column: 1; justify-self: end; background: var(--bg); padding: 1px 3px; white-space: nowrap; }
-  .hint:first-child { grid-column: 1 / span 2; margin-bottom: 4px; }
-  /* Keyboard hints only make sense with a keyboard and mouse/trackpad */
-  @media (hover: none) { .hint { display: none; } }
+  /* Shortcut legend: spread over exactly the height of the button stack */
+  .hints {
+    grid-column: 1; grid-row: 1 / span 3; list-style: none;
+    display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
+    white-space: nowrap;
+  }
+  .zoom button { grid-column: 2; }
+  /* Keyboard shortcuts only make sense with a keyboard and mouse/trackpad */
+  @media (hover: none) { .hints { display: none; } }
   .zoom button {
     width: 36px; height: 36px; font-size: 20px; line-height: 1;
     background: var(--bg); border: 1.5px solid var(--fg); cursor: pointer;
